@@ -2,9 +2,9 @@
 
 Implementation of [TurboQuant](https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/) (ICLR 2026) — KV cache compression for local LLM inference, with planned extensions beyond the paper.
 
-> **Why "Plus"?** The base TurboQuant paper is v1. We have ideas for improvements coming post-v1 — adaptive bit allocation, temporal decay compression, expert-aware MoE compression, and more. The "plus" is what comes next.
+> **Why "Plus"?** The base TurboQuant paper is v1. I have ideas for improvements coming post-v1 — adaptive bit allocation, temporal decay compression, expert-aware MoE compression, and more. The "plus" is what comes next.
 
-Compresses transformer KV cache **up to 4.9×** using PolarQuant + QJL. Paper claims zero accuracy loss at 3.5-bit; our prototype achieves cosine similarity 0.95 at 3.5-bit on real Qwen3 KV tensors.
+Compresses transformer KV cache **up to 4.9×** using PolarQuant + QJL. Paper claims zero accuracy loss at 3.5-bit; this prototype achieves cosine similarity 0.95 at 3.5-bit on real Qwen3 KV tensors.
 
 **Working end-to-end on Apple Silicon** — Qwen 3.5 35B-A3B MoE generating coherent text with 3-bit TurboQuant KV cache on M5 Max via llama.cpp Metal.
 
@@ -13,49 +13,9 @@ Compresses transformer KV cache **up to 4.9×** using PolarQuant + QJL. Paper cl
 - 141 Python tests, 100% code coverage
 - C port integrated into llama.cpp with Metal GPU kernels
 - `--cache-type-k turbo3 --cache-type-v turbo3` works on Apple Silicon
-- Compression ratios match [Prince Canuma's MLX results](https://x.com/Prince_Canuma): 2.5-bit=4.9×, 3.5-bit=3.8×
 - Rotation Gaussianization validated on real Qwen3 KV tensors (kurtosis 900 → 2.9)
 
-## Quick Start — Python Prototype
-
-```bash
-git clone https://github.com/TheTom/turboquant_plus.git
-cd turboquant_plus
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-
-# Run tests (141 tests, 100% coverage)
-python3 -m pytest tests/ -v
-
-# Run demo
-python3 benchmarks/demo.py
-
-# Compare with Prince Canuma's results
-python3 benchmarks/test_outlier_comparison.py
-
-# Validate with real model tensors (requires torch + transformers)
-pip install transformers torch accelerate
-python3 benchmarks/validate_real_model.py
-```
-
-## Quick Start — llama.cpp (Apple Silicon)
-
-```bash
-# Build llama.cpp with TurboQuant (from feature branch)
-cd ~/local_llms/llama.cpp
-git checkout feature/turboquant-kv-cache
-cmake -B build -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-
-# Run with TurboQuant 3-bit KV cache (4.9× compression)
-./build/bin/llama-server \
-  -m models/your-model.gguf \
-  -ngl 99 -c 262144 -fa on \
-  --cache-type-k turbo3 --cache-type-v turbo3 \
-  -np 1 --host 0.0.0.0 --port 8080
-
-# Available cache types: turbo3 (3-bit, 4.9×), turbo4 (4-bit, 3.8×)
-```
+---
 
 ## Benchmark Results (M5 Max 128GB)
 
@@ -77,9 +37,9 @@ cmake --build build -j
 | turbo4 | 4.25 | 5.5 | 1.3 | 3.8× |
 | turbo3 | 3.25 | 5.3 | 1.3 | **4.9×** |
 
-> **Note**: Speed regression (13-35×) is from the unoptimized Metal shader — the dequantize kernel performs a full 128×128 rotation per chunk instead of once per block. Optimization tracked in [#23](https://github.com/TheTom/turboquant_plus/issues/23). Compression target met. Quality metrics (perplexity, NIAH) coming next.
+> **Speed note**: The 13-35× speed regression is from the unoptimized Metal shader — the dequantize kernel performs a full 128×128 rotation per chunk instead of once per block. Optimization is actively being worked on ([#23](https://github.com/TheTom/turboquant_plus/issues/23)). Compression target is met. Quality metrics (perplexity, NIAH) coming next.
 
-### Compression Quality (Python Prototype, Real Qwen3 KV Tensors)
+### Compression Quality (Python Prototype)
 
 | Config | Compression | Cosine Sim | MSE |
 |--------|-------------|------------|-----|
@@ -98,6 +58,102 @@ Std after rotation:  0.088388
 Expected (1/√d):     0.088388
 Ratio:               1.000 exactly
 ```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Python** >= 3.10
+- **NumPy** >= 1.24, **SciPy** >= 1.10
+- **cmake** + C/C++ compiler (for llama.cpp build)
+- **Xcode Command Line Tools** (macOS Metal build)
+- **Optional**: `torch`, `transformers`, `accelerate` (~4GB download, for real model validation)
+
+### Install the Python Prototype
+
+```bash
+git clone https://github.com/TheTom/turboquant_plus.git
+cd turboquant_plus
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+# Verify — should print "141 passed"
+python3 -m pytest tests/ -v
+```
+
+### Run the Demo
+
+```bash
+# Quick compression demo (no model needed)
+python3 benchmarks/demo.py
+
+# Validate on real model KV tensors (downloads Qwen3-1.7B, ~4GB)
+pip install transformers torch accelerate
+python3 benchmarks/validate_real_model.py
+```
+
+### Build llama.cpp with TurboQuant
+
+The llama.cpp port adds two new KV cache types: `turbo3` (3.25 bits, 4.9× compression) and `turbo4` (4.25 bits, 3.8× compression).
+
+```bash
+# Clone the fork with TurboQuant support
+git clone https://github.com/TheTom/turboquant_plus.git
+cd turboquant_plus
+
+# The llama.cpp patch is on the feature branch
+# Apply it to your llama.cpp checkout — files modified:
+#   ggml/include/ggml.h          — new type enum entries
+#   ggml/src/ggml-common.h       — block structures
+#   ggml/src/ggml-quants.h       — function declarations
+#   ggml/src/ggml-turbo-quant.c  — C quantize/dequantize
+#   ggml/src/ggml.c              — type traits registration
+#   ggml/src/CMakeLists.txt       — build config
+#   ggml/src/ggml-metal/ggml-metal.metal  — Metal GPU kernels
+#   ggml/src/ggml-metal/ggml-metal-device.m — Metal validation
+#   common/arg.cpp               — CLI arg parsing
+
+# Build with Metal (Apple Silicon)
+cd /path/to/your/llama.cpp
+cmake -B build -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+
+# Verify turbo types are available
+./build/bin/llama-server --help | grep turbo
+# Expected output includes: turbo3, turbo4
+```
+
+### Run Inference with TurboQuant KV Cache
+
+```bash
+# Server mode (for Hermes Agent, Claude Code, OpenCode, etc.)
+./build/bin/llama-server \
+  -m models/your-model.gguf \
+  --alias "model-turbo" \
+  --jinja -ngl 99 -c 262144 -fa on \
+  --cache-type-k turbo3 --cache-type-v turbo3 \
+  -np 1 --metrics --host 0.0.0.0 --port 8080
+
+# CLI mode (quick test)
+./build/bin/llama-cli \
+  -m models/your-model.gguf \
+  -ngl 99 -c 2048 -fa on \
+  --cache-type-k turbo3 --cache-type-v turbo3 \
+  -n 100 -p "Hello world" --jinja
+```
+
+### Cache Type Reference
+
+| Flag | Bits/val | Compression vs fp16 | Description |
+|------|----------|--------------------:|-------------|
+| `turbo3` | 3.25 | **4.9×** | 2-bit PolarQuant + 1-bit QJL. Best compression. |
+| `turbo4` | 4.25 | **3.8×** | 3-bit PolarQuant + 1-bit QJL. Better quality. |
+| `q8_0` | 8 | 2.0× | llama.cpp default quantized cache. |
+| `q4_0` | 4 | 4.0× | llama.cpp 4-bit cache. |
+
+---
 
 ## Architecture
 
@@ -133,16 +189,12 @@ turboquant/
 tests/               # 141 tests, 100% coverage on core modules
 benchmarks/
 ├── demo.py                    # Quick compression demo
+├── run_benchmark.py           # Server-based benchmark runner
+├── benchmark_results.md       # Full benchmark report
 ├── test_with_llama.py         # Integration test at Qwen 3.5 dimensions
-├── test_outlier_comparison.py # Comparison with Prince Canuma's results
-└── validate_real_model.py     # Phase A: real model tensor validation
+├── test_outlier_comparison.py # Outlier strategy comparison
+└── validate_real_model.py     # Real model KV tensor validation
 ```
-
-## Paper Reference
-
-- **TurboQuant**: arXiv 2504.19874 (ICLR 2026)
-- **PolarQuant**: arXiv 2502.02617 (AISTATS 2026)
-- **QJL**: arXiv 2406.03482
 
 ## Roadmap
 
@@ -159,96 +211,26 @@ benchmarks/
 | TurboQuant+ extensions | ⏳ | Adaptive bits, temporal decay, MoE-aware compression |
 | MLX port | ⏳ | Last |
 
-## Target Hardware
+## Paper Reference
 
-- Apple M5 Max 128 GB (llama.cpp + Metal)
-- RTX 3090 24 GB (llama.cpp + CUDA)
+- **TurboQuant**: [arXiv 2504.19874](https://arxiv.org/abs/2504.19874) (ICLR 2026)
+- **PolarQuant**: [arXiv 2502.02617](https://arxiv.org/abs/2502.02617) (AISTATS 2026)
+- **QJL**: [arXiv 2406.03482](https://arxiv.org/abs/2406.03482)
+- **Google Research Blog**: [TurboQuant: Redefining AI Efficiency](https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/)
 
-## Prerequisites
+## Contributing
 
-- **Python**: >= 3.10 (for prototype)
-- **NumPy**: >= 1.24, **SciPy**: >= 1.10
-- **cmake** + C/C++ compiler (for llama.cpp build)
-- **Xcode Command Line Tools** (macOS Metal build)
-- **Optional**: `torch`, `transformers`, `accelerate` (for real model validation — ~4GB download)
+Issues and PRs welcome. The main areas where help is needed:
 
-## Building from Source
-
-### Python Prototype (validation & testing)
-
-```bash
-git clone https://github.com/TheTom/turboquant_plus.git
-cd turboquant_plus
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-
-# Verify install (should see 141 passed, 0 failed)
-python3 -m pytest tests/ -v --cov=turboquant --cov-fail-under=95
-```
-
-### llama.cpp Integration (production inference)
-
-The llama.cpp port lives on a feature branch. To build:
-
-```bash
-# Prerequisites: cmake, C/C++ compiler, Xcode Command Line Tools (macOS)
-
-# Clone our fork with TurboQuant support
-git clone https://github.com/TheTom/llama-cpp-turboquant.git
-cd llama-cpp-turboquant
-# OR: if you already have llama.cpp, add our remote:
-# git remote add turboquant https://github.com/TheTom/llama-cpp-turboquant.git
-# git fetch turboquant feature/turboquant-kv-cache
-# git checkout feature/turboquant-kv-cache
-
-# Build with Metal (Apple Silicon) — requires macOS + Xcode
-cmake -B build -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-
-# Build with CUDA (NVIDIA) — requires CUDA toolkit
-cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-
-# Verify turbo types appear
-./build/bin/llama-server --help | grep turbo
-# Expected: turbo3, turbo4 in cache-type-k options
-```
-
-> **Note**: The llama.cpp integration is a fork, not yet upstreamed. The C/Metal sources
-> live in the fork repo, not in this Python prototype repo. See the
-> [feature branch](https://github.com/TheTom/llama-cpp-turboquant/tree/feature/turboquant-kv-cache)
-> for the full C implementation.
-
-### Running with TurboQuant KV Cache
-
-```bash
-# Server mode (for Hermes Agent, Claude Code, etc.)
-./build/bin/llama-server \
-  -m models/Qwen3.5-27B-Q8_0.gguf \
-  --alias "qwen-27b-turbo" \
-  --jinja -ngl 99 -c 262144 -fa on \
-  --cache-type-k turbo3 --cache-type-v turbo3 \
-  -np 1 --metrics --host 0.0.0.0 --port 8080
-
-# CLI mode (quick test)
-./build/bin/llama-cli \
-  -m models/your-model.gguf \
-  -ngl 99 -c 2048 -fa on \
-  --cache-type-k turbo3 --cache-type-v turbo3 \
-  -n 100 -p "Hello world" --jinja
-```
-
-### Cache Type Options
-
-| Flag | Bits/val | Compression vs fp16 | Description |
-|------|----------|--------------------:|-------------|
-| `turbo3` | 3.25 | **4.9×** | 2-bit PolarQuant + 1-bit QJL. Best compression. |
-| `turbo4` | 4.25 | **3.8×** | 3-bit PolarQuant + 1-bit QJL. Better quality. |
-| `q8_0` | 8 | 2.0× | llama.cpp default quantized cache. |
-| `q4_0` | 4 | 4.0× | llama.cpp 4-bit cache. |
+1. **Metal shader optimization** — reduce the O(d²) per-chunk rotation to O(d log d) using Walsh-Hadamard
+2. **CUDA backend** — port the Metal kernels to CUDA for NVIDIA GPU support
+3. **Benchmark hardening** — perplexity evaluation, NIAH testing, multi-run statistics
+4. **Quality metrics** — systematic comparison against q8_0/q4_0 on standard benchmarks
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0 — see [LICENSE](LICENSE).
+
+Copyright 2026 Tom Turney.
 
 Based on Google Research's TurboQuant paper (arXiv 2504.19874).
