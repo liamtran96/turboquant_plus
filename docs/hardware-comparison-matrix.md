@@ -86,7 +86,13 @@ Tracking performance across all tested hardware configurations. Updated as new d
 
 ## Pending Diagnostic Runs
 
-- [ ] Mario M1 Max — full diagnostic with turbo-diag v5
-- [ ] Tom RX 9070 XT — first AMD test (Ubuntu native or WSL2)
-- [ ] @tarruda M1 Ultra — retest with current TOT + diagnostic
-- [ ] @MgkMshrmBrkfst — awaiting build
+- [ ] Mario M1 Max 64GB — full diagnostic with turbo-diag v5
+- [ ] Tom RX 9070 XT — first AMD RDNA 4 test (Ubuntu native or WSL2)
+- [ ] @spiritbuun RTX 3090 — CUDA, fixed dequant independently
+- [ ] @jxwalker 2x 3090 NVLink + DGX Spark — multi-GPU
+- [ ] @vaiduakhu 1-2x RTX 5090 — Blackwell consumer GPU
+- [ ] @MyopicRaccoon 3090 via Thunderbolt eGPU — bandwidth edge case
+- [ ] @JamesNumb3rs AMD 9070 — RDNA 4
+- [ ] @DarkSmak812 AMD 6800 XT — RDNA 2, ROCm (FA broken on ROCm >7.0.1)
+- [ ] @tarruda M1 Ultra 128GB — retest with current TOT + diagnostic
+- [ ] @MgkMshrmBrkfst M1 Max 64GB — retest (turbo3 decode 3.96 tok/s confirmed)
