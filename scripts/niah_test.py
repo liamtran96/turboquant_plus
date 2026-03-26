@@ -480,9 +480,8 @@ def query_needle(
             {"role": "user", "content": user_content},
         ],
         "temperature": 0,
-        "max_tokens": 64,
-        # Disable thinking mode (Qwen3.5 etc.) — we want the answer directly
-        "enable_thinking": False,
+        # Qwen3.5 uses thinking mode — needs enough tokens to finish thinking + answer
+        "max_tokens": 512,
     }).encode()
 
     headers = {
@@ -494,10 +493,15 @@ def query_needle(
             req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode())
-                content = data["choices"][0]["message"]["content"] or ""
-                # Strip thinking tags if model uses <think>...</think> mode
-                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
-                return content.strip()
+                msg = data["choices"][0]["message"]
+                content = msg.get("content") or ""
+                # Some models put the answer in reasoning_content (Qwen3.5 thinking mode)
+                reasoning = msg.get("reasoning_content") or ""
+                # Combine both — we'll regex for the 6-digit code in either
+                full_response = f"{content} {reasoning}".strip()
+                # Strip thinking tags if present
+                full_response = re.sub(r"<think>.*?</think>", "", full_response, flags=re.DOTALL)
+                return full_response.strip()
         except (urllib.error.URLError, ConnectionError, OSError) as e:
             if attempt < max_retries - 1:
                 time.sleep(2 ** attempt)
