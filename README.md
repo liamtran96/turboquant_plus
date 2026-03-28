@@ -37,37 +37,64 @@ Validated end-to-end on Qwen 3.5 35B-A3B (MoE) on M5 Max via llama.cpp Metal.
 
 ### Top-of-Tree Results
 
-| Cache Type | Compression | Prefill tok/s | PPL (wikitext-2) | vs q8_0 prefill |
-|------------|-------------|--------------|-------------------|---------------|
-| f16 | 1.0x | — | 6.121 | — |
-| q8_0 | 2.0x | 2694 | 5.414 | baseline |
-| q4_0 | 4.0x | — | 6.142 | — |
-| **turbo3** | **4.6x** | **2747** | **5.445** | **1.02x** |
+| Cache Type | Bits/val | Compression | PPL (wikitext-2, 512c) | vs q8_0 |
+|------------|----------|-------------|----------------------|---------|
+| f16 | 16.0 | 1.0x | 6.121 | -0.16% |
+| q8_0 | 8.5 | 1.9x | 6.111 | baseline |
+| **turbo4** | **4.25** | **3.8x** | **6.125** | **+0.23%** |
+| q4_0 | 4.5 | 3.6x | 6.142 | +0.52% |
+| turbo3 | 3.5 | 4.6x | 6.176 | +1.06% |
 
-4.6x compression. ~1% perplexity increase vs q8_0 due to compression; sparse V introduces no additional degradation.
+turbo4 (4-bit PolarQuant) has the best quality after q8_0 — closer to q8_0 than q4_0, at better compression. turbo3 trades quality for maximum compression.
 
-### Context Scaling (Verified 2K-32K)
+### Prefill Context Scaling (Verified 2K-32K)
 
-| Context | turbo3 tok/s | q8_0 tok/s | turbo3/q8_0 |
-|---------|-------------|-----------|-------------|
-| 2K | 4694 | 4756 | 0.987x |
-| 4K | 3049 | 3084 | 0.989x |
-| 8K | 2287 | 2299 | 0.995x |
-| 16K | 1737 | 1757 | 0.989x |
-| 32K | 1211 | 1217 | 0.995x |
+| Context | turbo4 tok/s | turbo3 tok/s | q8_0 tok/s | turbo4/q8_0 | turbo3/q8_0 |
+|---------|-------------|-------------|-----------|------------|------------|
+| 2K | 2682 | 2708 | 2665 | 1.01x | 1.02x |
+| 4K | 2370 | 2289 | 2255 | 1.05x | 1.01x |
+| 8K | 2041 | 2054 | 2002 | 1.02x | 1.03x |
+| 16K | 1621 | 1698 | 1605 | 1.01x | 1.06x |
+| 32K | 1141 | 1204 | 1098 | 1.04x | 1.10x |
 
-**Prefill: flat 99% of q8_0 speed regardless of context length.**
+**Prefill: both turbo3 and turbo4 match or exceed q8_0 speed.** Compressed cache uses less bandwidth.
 
 ### Decode Speed — MoE (M5 Max 128GB, Qwen3.5-35B-A3B, Sparse V)
 
-| Context | turbo3 decode | q8_0 decode | turbo3/q8_0 |
-|---------|-------------|-----------|-------------|
-| Short (~12 tok) | 77.6 | 86.3 | 0.90x |
-| 4K | 74.9 | — | — |
-| 8K | 71.7 | — | — |
-| 16K | 66.5 | 72.0 | 0.92x |
-| 24K (70-page PDF) | 53.3 | 68.2 | 0.78x |
-| 32K | 57.7 | 62.0 | **0.93x** |
+| Config | Short decode (tg128) | pp32768+tg128 | Short vs q8_0 |
+|--------|---------------------|---------------|--------------|
+| q8_0 | 85.71 tok/s | 1173.91 tok/s | — |
+| **turbo4** | **79.87 tok/s** | **1060.12 tok/s** | **0.93x** |
+| turbo3 | 76.84 tok/s | 1141.74 tok/s | 0.90x |
+
+turbo4 decode is faster than turbo3 due to simpler nibble packing and direct-extract dequant.
+
+**Real-world server benchmark (70-page PDF, ~24K context):**
+
+| Config | Prefill tok/s | Decode tok/s | Decode vs q8_0 |
+|--------|-------------|-------------|---------------|
+| q8_0 | 1449.9 | 68.2 | — |
+| turbo4 | 1405.9 | 63.7 | 0.93x |
+| turbo3 | 1417.8 | 53.3 | 0.78x |
+
+### NIAH Retrieval (turbo4)
+
+| Test | q8_0 | turbo4 | turbo3 + sparse V |
+|------|------|--------|-------------------|
+| Single needle (9 positions) | 7/9 | 7/9 | 9/9 |
+
+turbo4 matches q8_0 retrieval accuracy.
+
+### KL Divergence vs f16
+
+| Cache | Mean KLD | Δp RMS | Same top-p % |
+|-------|----------|--------|-------------|
+| q8_0 | 0.001549 | 1.23% | 98.43% |
+| **turbo4** | **0.009633** | **2.71%** | **95.98%** |
+| q4_0 | 0.008091 | 2.75% | 95.83% |
+| turbo3 | 0.016145 | 4.09% | 94.31% |
+
+turbo4 KLD is 40% lower than turbo3. Same top-p agreement matches q4_0.
 
 ### Decode Speed — Dense (M5 Max 128GB, Qwen3.5-27B, Sparse V)
 
