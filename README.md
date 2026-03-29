@@ -47,7 +47,27 @@ Validated end-to-end on Qwen 3.5 35B-A3B (MoE) on M5 Max via llama.cpp Metal.
 | turbo3 | 3.5 | 4.6x | 6.176 | +1.06% |
 | turbo2 | 2.5 | 6.4x | 6.507 | +6.48% |
 
-turbo4 (4-bit PolarQuant) has the best quality after q8_0 — closer to q8_0 than q4_0, at better compression. turbo3 trades quality for maximum compression. turbo2 (2-bit) trades more quality for extreme compression — best used asymmetrically (`-ctk turbo2 -ctv turbo3`).
+turbo4 (4-bit PolarQuant) has the best quality after q8_0 — closer to q8_0 than q4_0, at better compression. turbo3 trades quality for maximum compression. turbo2 (2-bit) trades more quality for extreme compression — best used asymmetrically.
+
+> **Important: choosing the right config for your model.** TurboQuant quality depends on your base weight quantization. Models with Q8_0+ weights work well with symmetric turbo (e.g., `-ctk turbo3 -ctv turbo3`). Some low-bit models with Q4_K_M weights may benefit from asymmetric K/V: use `-ctk q8_0 -ctv turbo4` to keep K precision high while compressing V (tested on Qwen2.5-7B Q4_K_M). K precision is the dominant quality factor because it controls attention routing via softmax. Note: not all Q4_K_M models are sensitive to this — Mistral-24B Q4_K_M works fine with symmetric turbo. Validate on your specific model. See **[Configuration Recommendations](docs/turboquant-recommendations.md)** for the full tested matrix and practical guidance.
+>
+> Validated on Metal (Apple Silicon). CUDA mixed q8_0 × turbo parity is not yet verified.
+
+### Asymmetric K/V (NEW)
+
+TurboQuant supports independent K and V cache types. In current testing, keeping K at q8_0 while compressing V with turbo rescues quality on low-bit models where symmetric turbo degrades:
+
+| Model (weights) | K | V | PPL | vs q8_0 |
+|-----------------|---|---|------|---------|
+| Qwen2.5-7B (Q4_K_M) | q8_0 | turbo4 | 6.64 | +1.0% |
+| Qwen2.5-7B (Q4_K_M) | q8_0 | turbo3 | 6.71 | +2.0% |
+| Qwen2.5-7B (Q4_K_M) | turbo3 | turbo3 | 3556 | catastrophic |
+
+```bash
+# Validated starting point for low-bit models
+# (tested on Qwen2.5-7B Q4_K_M; not all Q4_K_M models need this)
+llama-server -m model-Q4_K_M.gguf -ctk q8_0 -ctv turbo4 -fa 1
+```
 
 ### Prefill Context Scaling (Verified 2K-32K)
 
