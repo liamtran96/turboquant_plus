@@ -230,6 +230,11 @@ These findings have been independently confirmed by multiple researchers:
 **@jesusmb1995** — Vulkan backend, Mistral-7B Q4_K_S (2026-03-31):
 - Mixed K/V Vulkan results support asymmetric thesis: q8_0-K + pq3_0-V = PPL 6.9426 (+0.64%), f16-K + pq4_0-V = PPL 6.8901 (-0.12%)
 - V compression nearly free when K precision maintained, consistent across a fourth GPU backend (Vulkan)
+- Note: uses `pq`/`tbq` type naming (jesusmb1995's Vulkan implementation), same underlying WHT + PolarQuant algorithm
+
+**@stragulus** — Vulkan, AMD Radeon 7900 XTX (2026-03-31):
+- Independent confirmation on jesusmb1995's Vulkan branch: q8_0-K + pq3_0-V = PPL 6.9226 (+0.37%), f16-K + pq4_0-V = PPL 6.8837 (-0.19%)
+- V compression free on fifth hardware/backend combination (Vulkan + AMD discrete)
 
 ---
 
