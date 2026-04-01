@@ -241,7 +241,7 @@ These findings have been independently confirmed by multiple researchers:
 - Production PPL validation (wikitext-2-raw, ctx=512, 20 chunks). First SM89 (Ada) data for this model
 - q8_0/tbq3 (asymmetric): PPL 7.5910 (+0.57% vs f16 7.5477) — tightest asymmetric result to date, confirms "V is free" on MoE
 - tbq3/tbq3 (symmetric): PPL 9.5221 (+26.16%) — catastrophic. Extends Qwen symmetric sensitivity from Qwen2.5 dense to **Qwen3 MoE**
-- tbq4/tbq4 (symmetric): PPL 7.9950 (+5.93%) — healthy, matching q4_0. Confirms turbo4-K catastrophic failure (zekrom-vale) is IQ4_XS-specific, not a universal turbo4 bug
+- tbq4/tbq4 (symmetric): PPL 7.9950 (+5.93%) — healthy, matching q4_0. The turbo4-K catastrophic failures reported by zekrom-vale were caused by kernel bugs in TheTom's fork (documented in turbo4-resurrection paper) and head_dim misdetection in AmesianX's fork (fixed in v1.3.0), not an inherent turbo4 or IQ4_XS issue. AmesianX independently confirmed turbo4-K works correctly: PPL 6.73 (+7.5%) on Qwen3-30B-A3B and 6.20 (+0.6%) on Qwen3.5-27B distill
 - Adds Qwen3 MoE to Section 4 sensitivity table: Qwen family is sensitive across architectures (dense and MoE), not just Qwen2.5
 
 **@Madreag** — [Optimized CUDA fork](https://github.com/Madreag/turbo3-cuda/tree/release/cuda-optimized), 4 GPUs (SM86x2/SM89/SM120), 1,351+ iterations (2026-04-01):
