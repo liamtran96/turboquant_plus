@@ -323,6 +323,8 @@ Source requirement: Q8_0 GGUF. Models already at Q4_K_M have minimal compression
 
 ### Model Compatibility Matrix
 
+For full community benchmark data across 12+ GPUs and 11+ models, see [Community Results](weight-compression-results.md).
+
 Based on architecture analysis and tested results. Models marked with * are predictions based on code analysis of `convert_hf_to_gguf.py` and need community validation.
 
 ### Tested Models — Validated Results
