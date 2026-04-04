@@ -10,9 +10,9 @@ Post-training weight compression for llama.cpp. No retraining, no calibration da
 
 | Metric | Value |
 |--------|-------|
-| Independent testers | **10+** |
-| GPUs tested | **12+** across 5 families |
-| Models tested | **11+** across 6 families |
+| Independent testers | **13+** |
+| GPUs tested | **14+** across 5 families |
+| Models tested | **13+** across 7 families |
 | Compression from Q8_0 | **28–42% smaller** |
 | PPL impact (Qwen/Phi) | **+0.4–3.9%** |
 | PPL impact (Llama Hybrid) | **+1.3–16%** (depth dependent) |
@@ -60,6 +60,7 @@ This table shows the largest compressed model each GPU has successfully run. It'
 | **2x V100** | 40GB | 27B | ✅ | **109%** (Config I faster than Q8_0) | Community (CUDA) |
 | **GTX 1080 Ti** | 11GB | 7B | ✅ | **106–111%** (Config I faster than Q8_0) | Internal (CUDA) |
 | **AMD RX 9070 XT** | 16GB | 1.5B | ✅ | **130%** (Config I faster than Q8_0) | Internal (HIP, Windows) |
+| **RTX 3050** | 6GB | 35B MoE (CPU offload) | ✅ | APEX-I-Quality, Windows CUDA 12.9 | Community (CUDA) |
 | **AMD RX 6600** | 8GB | 1.1B (CPU fallback) | ⚠️ | GPU matmul broken (not our bug) | Community (HIP) |
 
 **Note:** CUDA decode speed varies by kernel version. Load-time TQ4_1S→q8_0 conversion (Community contributor) gives 100% native q8_0 speed at compressed file size.
@@ -107,11 +108,30 @@ Do **not** use Config I on Llama. Use Hybrid (Q4_K for all FFN) or Premium (Q5_K
 
 Mistral extends LlamaModel but quality impact is much lower than Llama 70B. Premium at +0.41% is effectively free.
 
-### Gemma — In Progress
+### Gemma — KV Cache Validated
 
 | Model | Status | Notes |
 |-------|--------|-------|
-| Gemma 4 31B | ✅ Fixed | head_dim=256 asymmetric KV bug reproduced and fixed. Pull latest PR head. |
+| Gemma 4 26B A4B MoE | ✅ Working | KV turbo3/turbo4 confirmed on RTX 5090 at 64k/128k. Weight compression TBD. |
+
+Gemma 4 KV memory (RTX 5090, Q4_K_XL, 128k context):
+
+| KV Config | KV Size | Savings |
+|-----------|---------|---------|
+| q8_0/q8_0 | 1,519 MiB | — |
+| q8_0/turbo4 | 1,140 MiB | -380 MiB (-25%) |
+| q8_0/turbo3 | 1,039 MiB | -480 MiB (-32%) |
+
+Savings are smaller than dense models because Gemma 4's hybrid sliding-window architecture limits full-context KV to 5 of 30 layers.
+
+### Pre-Quantized APEX-I-Quality (Community GGUFs)
+
+[mudler's APEX collection](https://huggingface.co/collections/mudler/apex-quants) provides pre-quantized Config I GGUFs. Tested on RTX 3050 6GB (Windows, CUDA 12.9, CPU offload for experts):
+
+| Model | Baseline PPL | Asymmetric turbo3 PPL | PPL Delta | KV Savings |
+|-------|-------------|----------------------|-----------|------------|
+| Qwen3.5-35B-A3B-APEX-I-Quality | 6.58 | 6.62 | +0.62% | -132 MiB |
+| Qwen3-Coder-30B-APEX-I-Quality | 10.15 | 10.28 | +1.27% | -633 MiB |
 
 ---
 
@@ -125,6 +145,7 @@ Weight compression and TurboQuant KV compression stack with no additional penalt
 | Config I + turbo4 KV (27B) | Community (CUDA) (2x L40S) | No additional penalty from stacking |
 | Config I + turbo4 KV (all 10 models) | Community (RTX 4090) | Stacks across every model tested |
 | Config I + turbo4 KV (27B) | Community (CUDA) (dual 4090) | Confirmed independently |
+| Config I + turbo3 KV (27B, 32K ctx) | Community (RTX PRO 6000) | Config I+turbo3 beats Q8_0+turbo3 by 7% decode, -2.5 GiB working set |
 | TQ4_1S + turbo3 KV (8B, 100K ctx) | Community (RTX 4090) | 5.8 GiB total, turbo3 actually faster than f16 at long ctx |
 
 ### Independent Validation — TurboQuantDC (662 tests, RTX 4090)
