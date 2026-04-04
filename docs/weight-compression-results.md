@@ -35,7 +35,7 @@ Post-training weight compression for llama.cpp. No retraining, no calibration da
 | Llama 3.2-3B | 3.2B | Llama | Hybrid | 2.10G | +1.9% |
 | Mistral 7B v0.3 | 7.2B | Mistral | Hybrid | 4.40G | +1.28% |
 | Mistral 7B v0.3 | 7.2B | Mistral | Premium | 5.46G | +0.41% |
-| Gemma 4 31B | 30.7B | Gemma | Config I | 18.9G | TBD |
+| Gemma 4 26B A4B MoE | 26B | Gemma | Config I | 24.4G | -2.3% (better) |
 
 ---
 
@@ -108,11 +108,13 @@ Do **not** use Config I on Llama. Use Hybrid (Q4_K for all FFN) or Premium (Q5_K
 
 Mistral extends LlamaModel but quality impact is much lower than Llama 70B. Premium at +0.41% is effectively free.
 
-### Gemma — KV Cache Validated
+### Gemma — Working (MoE limits weight compression benefit)
 
-| Model | Status | Notes |
-|-------|--------|-------|
-| Gemma 4 26B A4B MoE | ✅ Working | KV turbo3/turbo4 confirmed on RTX 5090 at 64k/128k. Weight compression TBD. |
+| Model | Source | Compressed | Reduction | PPL Delta | Decode % | Tested By |
+|-------|--------|-----------|-----------|-----------|----------|-----------|
+| Gemma 4 26B A4B MoE | 25.0G | 24.4G | -2.3% | -2.3% (better) | 100% | Community (RTX 5090) |
+
+Minimal weight compression benefit on Gemma 4 because it's MoE with very few dense attention layers. KV cache compression is the real win here:
 
 Gemma 4 KV memory (RTX 5090, Q4_K_XL, 128k context):
 
@@ -123,6 +125,8 @@ Gemma 4 KV memory (RTX 5090, Q4_K_XL, 128k context):
 | q8_0/turbo3 | 1,039 MiB | -480 MiB (-32%) |
 
 Savings are smaller than dense models because Gemma 4's hybrid sliding-window architecture limits full-context KV to 5 of 30 layers.
+
+**Note:** `ffn_down` requested `q4_k` but fell back to `q5_0` on incompatible tensor shapes.
 
 ### Pre-Quantized APEX-I-Quality (Community GGUFs)
 
