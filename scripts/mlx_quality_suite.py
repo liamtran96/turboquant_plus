@@ -174,11 +174,29 @@ def _make_baseline_cache(model: nn.Module) -> list:
     return make_prompt_cache(model)
 
 
-def _make_turbo_cache(model: nn.Module, bits: int, asymmetric: bool) -> list:
-    """Create a TurboKVCache list with specified config."""
-    n = _n_layers(model)
+def _make_turbo_cache(model: nn.Module, bits: int, asymmetric: bool,
+                      min_compress_tokens: int = 256) -> list:
+    """Create a cache list with TurboKVCache replacing standard KVCache layers.
+
+    For hybrid models (e.g., Qwen3.5) that mix linear-attention (ArraysCache)
+    and full-attention (KVCache) layers, only the KVCache layers are swapped
+    to TurboKVCache. Non-KVCache layers keep their default cache type.
+    """
     key_bits = 0 if asymmetric else None  # 0 = keep keys FP16
-    return [TurboKVCache(bits=bits, key_bits=key_bits) for _ in range(n)]
+
+    # Get the model's default cache to discover per-layer types
+    baseline = make_prompt_cache(model)
+    turbo_cache = []
+    for c in baseline:
+        if type(c).__name__ == "KVCache":
+            turbo_cache.append(TurboKVCache(
+                bits=bits, key_bits=key_bits,
+                min_compress_tokens=min_compress_tokens,
+            ))
+        else:
+            # Keep non-KV layers (ArraysCache, etc.) as-is
+            turbo_cache.append(c)
+    return turbo_cache
 
 
 def _build_haystack(target_tokens: int, tokenizer, rng: random.Random,
@@ -323,8 +341,9 @@ def run_niah(model, tokenizer, bits: int, asymmetric: bool, verbose: bool) -> li
 # Test: KLD
 # ---------------------------------------------------------------------------
 
-# Fixed text for KLD comparison (~250 tokens). Multi-topic so we exercise
-# varied token distributions.
+# Fixed text for KLD comparison (~500+ tokens). Multi-topic so we exercise
+# varied token distributions. Must exceed min_compress_tokens (default 256)
+# so that TurboKVCache actually compresses.
 KLD_TEXT = (
     "The development of the transistor at Bell Labs in 1947 marked the beginning "
     "of the semiconductor revolution. William Shockley, John Bardeen, and Walter "
@@ -343,7 +362,25 @@ KLD_TEXT = (
     "The industry continues to find ways to extend performance through packaging "
     "innovations, heterogeneous integration, and specialized accelerators for "
     "tasks like machine learning inference. The original transistor that started "
-    "it all now sits in the Smithsonian Institution."
+    "it all now sits in the Smithsonian Institution.\n\n"
+    "The history of cryptography stretches back thousands of years, from simple "
+    "substitution ciphers used by Julius Caesar to the sophisticated public-key "
+    "systems that protect modern internet communications. The Enigma machine, "
+    "used by Nazi Germany during World War Two, employed a series of rotating "
+    "electrical rotors to create a cipher with an astronomical number of possible "
+    "settings. Breaking Enigma required the combined efforts of Polish and British "
+    "mathematicians, most notably Alan Turing at Bletchley Park, who designed "
+    "electromechanical devices called bombes to systematically test key settings. "
+    "The success of this effort shortened the war by an estimated two years and "
+    "saved millions of lives. After the war, Claude Shannon published his "
+    "groundbreaking paper on communication theory, establishing the mathematical "
+    "foundations of information theory and proving that a one-time pad provides "
+    "perfect secrecy. The invention of public-key cryptography by Diffie and "
+    "Hellman in 1976 revolutionized the field by allowing two parties to establish "
+    "a shared secret over an insecure channel without any prior arrangement. "
+    "Today, RSA and elliptic curve cryptography protect trillions of dollars in "
+    "daily electronic transactions, while quantum computing threatens to upend "
+    "these systems entirely within the coming decades."
 )
 
 
@@ -371,7 +408,9 @@ def run_kld(model, tokenizer, bits: int, asymmetric: bool, verbose: bool) -> lis
     mx.eval(baseline_logits)
 
     print("  Computing turbo logits ...", flush=True)
-    turbo_cache = _make_turbo_cache(model, bits, asymmetric)
+    # Use min_compress_tokens=32 so compression kicks in during the forward pass
+    # (default 256 would skip compression on short texts)
+    turbo_cache = _make_turbo_cache(model, bits, asymmetric, min_compress_tokens=32)
     turbo_logits = _forward_logits(model, tokenizer, KLD_TEXT, cache=turbo_cache)
     mx.eval(turbo_logits)
 
