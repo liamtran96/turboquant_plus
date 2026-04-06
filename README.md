@@ -658,9 +658,10 @@ pip install mlx-lm
 
 `make_turbo_cache` wraps mlx-lm's native `KVCache` with TurboQuant compression. Attention runs on FP16 through Apple's native SDPA at full speed (zero overhead). Call `compress()` on cache layers to create turbo4-compressed KV storage (SRHT + Lloyd-Max, ~74% savings). The compressed copy is stored alongside FP16 for future memory recovery.
 
-- Zero decode overhead (native SDPA, no custom kernels in attention path)
-- 74% KV compression available via explicit `compress()` call
-- Boundary layer protection (first/last 2 KV layers stay FP16)
+- **Normal mode**: zero decode overhead (native SDPA, no custom kernels)
+- **Compact mode**: `compact_turbo_cache(cache)` — quantizes V to 8-bit, uses custom C++ Metal `sdpa_vector_qv` kernel compiled into metallib. 97-100% baseline speed with real memory savings
+- 74% KV compression available via explicit `compress()` call (stored alongside FP16)
+- Boundary layer protection (first/last 2 KV layers stay FP16 — also a speed optimization)
 - Works with stock mlx-lm, no fork needed
 - All 8 TurboQuant+ papers applied (beta centroids, dual SRHT signs, boundary layers)
 
